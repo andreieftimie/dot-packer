@@ -1,21 +1,24 @@
 {
     "name": "dot-packer",
-    "version": "0.0.1",
-    "description": "Precompile, compress, and pack doT.js javascript templates into one file",
+    "version": "0.2.0",
+    "description": "Compile, compress, and pack doT.js javascript templates into one file",
     "preferGlobal": "true",
     "main": "index.js",
-    "bin": { "dot-packer": "index.js" },
-    "author": "Richard Harriman",
-    "keywords": ["jst", "dot.js", "packing"],
+    "bin": {
+        "dot-packer": "index.js"
+    },
+    "author": "Richard Harriman - original dot packer. Andrei Cimpean - rework for recursive file reading, filtering based on file extension",
+    "keywords": ["dot.js", "packing", "templates"],
     "repository" : {
         "type": "git",
-        "url": "https://git@github.com:Katahdin/dot-packer.git"
+        "url": "git@github.com:andreisebastianc/dot-packer.git"
     },
     "dependencies": {
         "commander": "0.5.2",
-		"dot":">= 0.2.4",
-		"uglify-js":">=1.3.2"
+        "dot":">= 0.2.4",
+        "uglify-js":">=1.3.2"
     },
-	
-    "engines": { "node": "*" }
+    "engines": {
+        "node": "*"
+    }
 }
