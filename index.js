@@ -1,98 +1,137 @@
 #!/usr/bin/env node
 
-var fs = require('fs');
-var dot = require('dot');
+(function () {
+    "use strict";
 
-var ugly = require("uglify-js");
-var program = require('commander');
+    var fs = require('fs');
+    var path = require('path');
+    var dot = require('dot');
+    var ugly = require("uglify-js");
+    var program = require('commander');
 
+    program
+    .version('0.2.0')
+    .usage('dot-packer')
+    .option('-e, --extension [value]', 'File extension to be used. Defaults to dot.')
+    .option('-d, --dir [value]', 'Target directory <path>')
+    .option('-l, --list [value]', 'List of paths')
+    .option('-c, --encoding [value]', 'file encoding to be used (in and out). can be ascii or utf8. defaults to utf8.')
+    .option('-o, --output [value]', 'Output file <path>', "jst.js")
+    .option('-n, --ns [value]', 'The GLOBAL variable to pack the templates in',"JST")
+    .parse(process.argv);
 
-program
-.version('0.0.1')
-.usage('dot-packer')
-.option('-d, --dir [value]', 'Target directory <path>')
-.option('-l, --list [value]', 'List of paths')
-.option('-e, --encoding [value]', 'file encoding to be used (in and out). can be ascii or utf8. defaults to utf8.')
-.option('-o, --output [value]', 'Output file <path>', "jst.js")
-.option('-n, --ns [value]', 'The GLOBAL variable to pack the templates in',"JST")
-.parse(process.argv);
+    function getExtension(filename) {
+        var ext = path.extname(filename||'').split('.');
+        return ext[ext.length - 1];
+    }
 
+    function walk(dir, done) {
 
-if (!program.list){
-    console.log("The target directory path is required. -h for help");
-}
-else  {
+        var results = [],
+        extension = program.extension || 'dot';
 
-    try {
+        fs.readdir(dir, function(err, list) {
+            if ( err ) {
+                return done(err);
+            }
+            var pending = list.length;
+            if ( !pending ){
+                return done(null, results);
+            }
+            list.forEach(function(file) {
+                file = path.resolve(dir, file);
+                fs.stat(file, function(err, stat) {
+                    if (stat && stat.isDirectory()) {
+                        walk(file, function(err, res) {
+                            results = results.concat(res);
+                            if (!--pending) {
+                                done(null, results);
+                            }
+                        });
+                    } else {
+                        if ( getExtension(file) === extension ) {
+                            results.push(file);
+                        }
+                        if (!--pending) {
+                            done(null, results);
+                        }
+                    }
+                });
+            });
+        });
+        return results;
+    }
 
-        var files;
+    if ( program.dir ) {
+        try {
+            walk(program.dir, function (err, results) {
+                var i, l, v, temp = '';
 
-        var code = program.ns + "= function(){ return new Function();};";
-        var file = null;
+                if ( err ) {
+                    throw err;
+                }
 
+                for ( i = 0, l = results.length; i < l; i ++) {
+                    v = results[i];
+                    temp += convert(v);
+                }
 
-        var data = fs.readFileSync(program.list, 'utf8');
-        var folders = JSON.parse(data).folders;
+                console.log('\nuglifying ' + results.length + 'templates.');
 
-        console.log(folders);
-        console.log(folders.length);
-
-        for (var i in folders) {
-            code += readFilesFromDir(folders[i]);
+                uglityToFile(temp);
+            });
+        } catch (e) {
+            dumpError(e);
         }
+    }
 
-        var ast = ugly.parse(code); // parse code and get the initial AST
+    function uglityToFile (data) {
+        var ast, compressed, output;
+
+        ast = ugly.parse(data); // parse output and get the initial AST
         ast.figure_out_scope();
-        var compressed=ast.transform(ugly.Compressor());
+
+        compressed=ast.transform(ugly.Compressor());
         compressed.figure_out_scope();
         compressed.compute_char_frequency();
         compressed.mangle_names();
-        var final_code = compressed.print_to_string(); // compressed code here
 
-        fs.writeFileSync(program.output,final_code, program.encoding);
+        output = compressed.print_to_string(); // compressed output here
+
+        fs.writeFileSync(program.output, output, program.encoding);
     }
 
-    catch(err) {
-        dumpError(err);
+    function convert(path){
+        var data = fs.readFileSync(path, program.encoding),
+        output = dot.template(data).toString(),
+        header;
+
+        path = path.replace(program.dir,"");
+        path = path.replace('.jst','');
+
+        header = program.ns + "['" + path + "'] = function(it)";
+
+        output = output.replace('function anonymous(it)', header)+";";
+        return output;
     }
-}
 
-function readFilesFromDir(dirname) {
-    var files = fs.readdirSync(dirname),
-    code = '';
+    function dumpError(err) {
 
-    for (i in files) {
-        if (files[i].match(/^[^\.]*\.jst/g)) {
-            console.log("Processing:" + files[i]);
-            code += convert(dirname,files[i],program.ns)+"\r\n";
+        console.log('\nDOT PACKER:');
+
+        if (typeof err === 'object') {
+            if (err.message) {
+                console.log('\nMessage: ');
+                console.log('\n====================\n');
+                console.log(err.message);
+            }
+            if (err.stack) {
+                console.log('\nStacktrace:');
+                console.log('\n====================\n');
+                console.log(err.stack);
+            }
+        } else {
+            console.log('cannot provide usefull information');
         }
     }
-
-    return code;
-}
-
-function convert(dir,fileName, namespace){
-    var path = dir + fileName;
-    var data = fs.readFileSync(path, program.encoding);
-    var code = dot.template(data).toString();
-    var header = namespace+"['"+dir+fileName.replace('.jst','')+"'] = function(it)";
-    code = code.replace('function anonymous(it)', header)+";";
-    return code;
-}
-
-function dumpError(err) {
-    if (typeof err === 'object') {
-        if (err.message) {
-            console.log('\nMessage: ' + err.message)
-        }
-        if (err.stack) {
-            console.log('\nStacktrace:')
-            console.log('====================')
-            console.log(err.stack);
-        }
-    } else {
-        console.log('dumpError :: argument is not an object');
-    }
-}
-
-
+}());
