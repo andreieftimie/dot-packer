@@ -17,7 +17,8 @@
     .option('-l, --list [value]', 'List of paths')
     .option('-c, --encoding [value]', 'file encoding to be used (in and out). can be ascii or utf8. defaults to utf8.')
     .option('-o, --output [value]', 'Output file <path>', "jst.js")
-    .option('-n, --ns [value]', 'The GLOBAL variable to pack the templates in',"JST")
+    .option('-N, --NS [value]', 'The GLOBAL variable to pack the templates in',"JST")
+    .option('-n, --ns [value]', 'The LOCAL variable to append to the templates name',"")
     .parse(process.argv);
 
     function getExtension(filename) {
@@ -102,14 +103,22 @@
     }
 
     function convert(path){
-        var data = fs.readFileSync(path, program.encoding),
-        output = dot.template(data).toString(),
-        header;
+        var data, output, header, realPathOfDir;
+        
+        path = fs.realpathSync(path);
+        
+        data = fs.readFileSync(path, program.encoding);
+        output = dot.template(data).toString();;
+        realPathOfDir = fs.realpathSync(program.dir);
 
-        path = path.replace(program.dir,"");
+        path = path.replace(realPathOfDir,"");
         path = path.replace('.jst','');
+        
+        if(program.ns){
+            path = program.ns + path;
+        }
 
-        header = program.ns + "['" + path + "'] = function(it)";
+        header = program.NS + "['" + path + "'] = function(it)";
 
         output = output.replace('function anonymous(it)', header)+";";
         return output;
